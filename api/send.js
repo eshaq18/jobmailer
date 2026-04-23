@@ -21,7 +21,7 @@ export default async function handler(req, res) {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'api-key': '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',
+        'api-key': process.env.BREVO_KEY || '',
       },
       body: JSON.stringify(payload),
     });
