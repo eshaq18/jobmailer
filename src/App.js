@@ -3,7 +3,7 @@ import * as XLSX from 'xlsx';
 import './App.css';
 
 const PASS = '059805';
-const API_KEY_STORED = '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';
+const API_KEY_STORED = process.env.REACT_APP_BREVO_KEY || '';
 const FROM_EMAIL = 'jobs@eshaqjob.store';
 
 const LOGO = () => (
@@ -510,7 +510,7 @@ export default function App() {
               {(sending || stopped || sendLog.length > 0) && (
                 <div className="card">
                   <div className="progress-header">
-                    <span>{sendIdx} / {targetList.length}</span>
+                    <span>{targetList.length} / {sendIdx}</span>
                     <span className={`status-badge ${sending && !paused ? 'running' : paused ? 'paused' : stopped ? 'stopped' : 'done'}`}>
                       {sending && !paused ? 'جارٍ الإرسال' : paused ? 'متوقف مؤقتاً' : stopped ? 'تم الإيقاف' : 'اكتمل'}
                     </span>
