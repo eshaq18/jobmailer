@@ -72,6 +72,7 @@ export default function App() {
 
   // Message
   const [subject, setSubject] = useState('طلب توظيف — {{CompanyName}}');
+  const [senderName, setSenderName] = useState('وظيفتنا');
   const [body, setBody] = useState(
     'السادة المسؤولين في {{CompanyName}}،\n\nأتقدم بطلبي للانضمام إلى فريقكم وأرفق سيرتي الذاتية للاطلاع عليها.\n\nشكراً لكم،\nفريق وظيفتنا'
   );
@@ -201,7 +202,7 @@ export default function App() {
           subject: filledSubject,
           htmlContent: filledBody.replace(/\n/g, '<br>'),
           textContent: filledBody,
-          fromName: 'وظيفتنا',
+          fromName: senderName || 'وظيفتنا',
           fromEmail: FROM_EMAIL,
         };
         if (cvB64 && cvFile) {
@@ -456,6 +457,11 @@ export default function App() {
           {/* ══ TAB 1 — الرسالة ══ */}
           {activeTab === 1 && (
             <div className="tab-content">
+              <div className="card">
+                <h3 className="card-title">اسم المرسل</h3>
+                <input className="inp" value={senderName} onChange={e => setSenderName(e.target.value)} placeholder="مثال: محمد العمري" />
+                <p className="hint">هذا الاسم يظهر للمستلم كاسم المرسل</p>
+              </div>
               <div className="card">
                 <h3 className="card-title">عنوان الرسالة</h3>
                 <input className="inp" value={subject} onChange={e => setSubject(e.target.value)} placeholder="عنوان الإيميل" />
