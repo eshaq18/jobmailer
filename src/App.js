@@ -3,8 +3,8 @@ import * as XLSX from 'xlsx';
 import './App.css';
 
 const PASS = '059805';
-const API_KEY_STORED = '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';
-const FROM_EMAIL = 'jobs@eshaqjob.store';
+const API_KEY_STORED = '';
+const FROM_EMAIL = '';
 
 const LOGO = () => (
   <svg width="38" height="38" viewBox="0 0 38 38" fill="none">
