@@ -3,8 +3,8 @@ import * as XLSX from 'xlsx';
 import './App.css';
 
 const PASS = '059805';
-const API_KEY_STORED = '';
-const FROM_EMAIL = '';
+const API_KEY_STORED = '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';
+const FROM_EMAIL = 'jobs@eshaqjob.store';
 
 const LOGO = () => (
   <svg width="38" height="38" viewBox="0 0 38 38" fill="none">
@@ -58,12 +58,13 @@ export default function App() {
   const [activeTab, setActiveTab] = useState(0);
 
   // Excel / contacts
-  const [sheets, setSheets] = useState({});       // { sheetName: [rows] }
-  const [selectedCity, setSelectedCity] = useState('');
-  const [qtyMode, setQtyMode] = useState('all');   // all | preset | custom
+  const [sheets, setSheets] = useState({});
+  const [selectedCities, setSelectedCities] = useState([]); // [] = الكل
+  const [qtyMode, setQtyMode] = useState('all');
   const [qtyPreset, setQtyPreset] = useState(100);
   const [qtyCustom, setQtyCustom] = useState('');
   const [excelFileName, setExcelFileName] = useState('');
+  const [delaySeconds, setDelaySeconds] = useState(5); // تأخير بين الإيميلات
 
   // CV
   const [cvFile, setCvFile] = useState(null);
@@ -88,19 +89,30 @@ export default function App() {
   const stopRef = useRef(false);
   const timerRef = useRef(null);
 
+  // ─── toggle city ───
+  const toggleCity = city => {
+    setSelectedCities(prev =>
+      prev.includes(city) ? prev.filter(c => c !== city) : [...prev, city]
+    );
+  };
+
   // ─── derive target list ───
   const getTargetList = useCallback(() => {
-    const cityRows = selectedCity && sheets[selectedCity] ? sheets[selectedCity] : Object.values(sheets).flat();
-    // find email column
+    let cityRows;
+    if (selectedCities.length === 0) {
+      cityRows = Object.values(sheets).flat();
+    } else {
+      cityRows = selectedCities.flatMap(c => sheets[c] || []);
+    }
     const withEmail = cityRows.filter(r => {
       const e = r.Email || r.email || r['الإيميل'] || r['البريد'] || r['البريد الإلكتروني'] || '';
-      return e.trim();
+      return String(e).trim();
     });
     if (qtyMode === 'all') return withEmail;
     if (qtyMode === 'preset') return withEmail.slice(0, qtyPreset);
     const n = parseInt(qtyCustom);
     return withEmail.slice(0, isNaN(n) ? withEmail.length : n);
-  }, [sheets, selectedCity, qtyMode, qtyPreset, qtyCustom]);
+  }, [sheets, selectedCities, qtyMode, qtyPreset, qtyCustom]);
 
   const targetList = getTargetList();
 
@@ -127,7 +139,7 @@ export default function App() {
         result[name] = XLSX.utils.sheet_to_json(wb.Sheets[name]);
       });
       setSheets(result);
-      setSelectedCity('');
+      setSelectedCities([]);
     };
     reader.readAsArrayBuffer(file);
   };
@@ -218,7 +230,7 @@ export default function App() {
       }
 
       if (i < targetList.length - 1 && !stopRef.current) {
-        await new Promise(r => setTimeout(r, 3000));
+        await new Promise(r => setTimeout(r, delaySeconds * 1000));
       }
     }
 
@@ -305,24 +317,30 @@ export default function App() {
               {/* City selection */}
               {Object.keys(sheets).length > 0 && (
                 <div className="card">
-                  <h3 className="card-title">اختر المدينة</h3>
+                  <h3 className="card-title">اختر المدن <span style={{fontSize:12,color:'var(--muted)',fontWeight:400}}>(يمكنك اختيار أكثر من مدينة)</span></h3>
                   <div className="city-grid">
                     <button
-                      className={`city-btn ${selectedCity === '' ? 'active' : ''}`}
-                      onClick={() => setSelectedCity('')}
+                      className={`city-btn ${selectedCities.length === 0 ? 'active' : ''}`}
+                      onClick={() => setSelectedCities([])}
                     >
                       الكل <span className="city-count">{Object.values(sheets).flat().length}</span>
                     </button>
                     {Object.keys(sheets).map(city => (
                       <button
                         key={city}
-                        className={`city-btn ${selectedCity === city ? 'active' : ''}`}
-                        onClick={() => setSelectedCity(city)}
+                        className={`city-btn ${selectedCities.includes(city) ? 'active' : ''}`}
+                        onClick={() => toggleCity(city)}
                       >
+                        {selectedCities.includes(city) && <span style={{marginLeft:4}}>✓</span>}
                         {city} <span className="city-count">{sheets[city].length}</span>
                       </button>
                     ))}
                   </div>
+                  {selectedCities.length > 0 && (
+                    <p style={{fontSize:13,color:'var(--muted)',marginTop:10}}>
+                      المدن المختارة: <strong style={{color:'var(--text)'}}>{selectedCities.join('، ')}</strong>
+                    </p>
+                  )}
                 </div>
               )}
 
@@ -359,8 +377,47 @@ export default function App() {
                   )}
                   <p className="count-summary">
                     سيتم الإرسال لـ <strong>{targetList.length}</strong> إيميل
-                    {selectedCity ? ` من ${selectedCity}` : ' من جميع المدن'}
+                    {selectedCities.length > 0 ? ` من ${selectedCities.join('، ')}` : ' من جميع المدن'}
                   </p>
+                </div>
+              )}
+
+              {/* Delay & Estimated Time */}
+              {Object.keys(sheets).length > 0 && (
+                <div className="card">
+                  <h3 className="card-title">التأخير بين الإيميلات</h3>
+                  <div style={{display:'flex',alignItems:'center',gap:16,flexWrap:'wrap'}}>
+                    <div style={{flex:1,minWidth:200}}>
+                      <div style={{display:'flex',justifyContent:'space-between',marginBottom:6}}>
+                        <span style={{fontSize:13,color:'var(--muted)'}}>التأخير</span>
+                        <strong style={{fontSize:15}}>{delaySeconds} ثانية</strong>
+                      </div>
+                      <input
+                        type="range" min="1" max="60" step="1"
+                        value={delaySeconds}
+                        onChange={e => setDelaySeconds(Number(e.target.value))}
+                        style={{width:'100%',accentColor:'var(--gold)'}}
+                      />
+                      <div style={{display:'flex',justifyContent:'space-between',fontSize:11,color:'var(--muted)',marginTop:2}}>
+                        <span>1 ث (سريع)</span><span>30 ث (آمن)</span><span>60 ث (بطيء)</span>
+                      </div>
+                    </div>
+                    <div style={{background:'var(--bg)',borderRadius:10,padding:'12px 20px',textAlign:'center',minWidth:140}}>
+                      <p style={{fontSize:11,color:'var(--muted)',marginBottom:4}}>الوقت المتوقع</p>
+                      <p style={{fontSize:22,fontWeight:700,color:'var(--gold)'}}>
+                        {(() => {
+                          const totalSec = targetList.length * delaySeconds;
+                          const h = Math.floor(totalSec / 3600);
+                          const m = Math.floor((totalSec % 3600) / 60);
+                          const s = totalSec % 60;
+                          if (h > 0) return `${h}س ${m}د`;
+                          if (m > 0) return `${m}د ${s}ث`;
+                          return `${s}ث`;
+                        })()}
+                      </p>
+                      <p style={{fontSize:11,color:'var(--muted)',marginTop:4}}>{targetList.length} إيميل</p>
+                    </div>
+                  </div>
                 </div>
               )}
 
@@ -432,6 +489,20 @@ export default function App() {
                 <div className="stat-card">
                   <span className="stat-label">الوقت المنقضي</span>
                   <span className="stat-val">{fmt(elapsed)}</span>
+                </div>
+                <div className="stat-card" style={{gridColumn:'span 2'}}>
+                  <span className="stat-label">الوقت المتبقي المتوقع</span>
+                  <span className="stat-val" style={{fontSize:20}}>
+                    {sending && sendIdx > 0 ? (() => {
+                      const remaining = (targetList.length - sendIdx) * delaySeconds;
+                      const h = Math.floor(remaining / 3600);
+                      const m = Math.floor((remaining % 3600) / 60);
+                      const s = remaining % 60;
+                      if (h > 0) return `${h}س ${m}د`;
+                      if (m > 0) return `${m}د ${s}ث`;
+                      return `${s}ث`;
+                    })() : '—'}
+                  </span>
                 </div>
               </div>
 
@@ -522,8 +593,8 @@ export default function App() {
                   </div>
                   <div className="report-item">
                     <span className="report-icon">🏙</span>
-                    <span className="report-num" style={{ fontSize: 18 }}>{selectedCity || 'الكل'}</span>
-                    <span className="report-lbl">المدينة المحددة</span>
+                    <span className="report-num" style={{ fontSize: 16 }}>{selectedCities.length > 0 ? selectedCities.join('، ') : 'الكل'}</span>
+                    <span className="report-lbl">المدن المحددة</span>
                   </div>
                 </div>
                 {sendLog.length > 0 && (
