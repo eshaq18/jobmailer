@@ -6,43 +6,26 @@ export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
   const { to, toName, subject, body, fromName, fromEmail, apiKey, attachments } = req.body;
-
-  if (!to || !subject || !body || !apiKey) {
-    return res.status(400).json({ error: 'Missing required fields' });
-  }
+  if (!to || !subject || !body || !apiKey) return res.status(400).json({ error: 'Missing fields' });
 
   try {
     const emailData = {
-      sender: { name: fromName || 'Job Applicant', email: fromEmail || 'hr@eshaqjob.store' },
+      sender: { name: fromName || 'وظيفتنا', email: fromEmail || 'jobs@eshaqjob.store' },
       to: [{ email: to, name: toName || to }],
       subject,
       htmlContent: body.replace(/\n/g, '<br>'),
       textContent: body,
     };
-
-    if (attachments && attachments.length > 0) {
-      emailData.attachment = attachments.map(a => ({
-        content: a.content,
-        name: a.name,
-      }));
+    if (attachments?.length) {
+      emailData.attachment = attachments.map(a => ({ content: a.content, name: a.name }));
     }
-
     const response = await fetch('https://api.brevo.com/v3/smtp/email', {
       method: 'POST',
-      headers: {
-        'accept': 'application/json',
-        'api-key': apiKey,
-        'content-type': 'application/json',
-      },
+      headers: { 'accept': 'application/json', 'api-key': apiKey, 'content-type': 'application/json' },
       body: JSON.stringify(emailData),
     });
-
     const data = await response.json();
-
-    if (!response.ok) {
-      return res.status(response.status).json({ error: data.message || 'Brevo API error' });
-    }
-
+    if (!response.ok) return res.status(response.status).json({ error: data.message || 'Brevo error' });
     return res.status(200).json({ success: true, messageId: data.messageId });
   } catch (err) {
     return res.status(500).json({ error: err.message });

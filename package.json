@@ -1,5 +1,5 @@
 {
-  "name": "jobmailer",
+  "name": "wazifatna",
   "version": "2.0.0",
   "private": true,
   "dependencies": {
@@ -12,8 +12,5 @@
     "start": "react-scripts start",
     "build": "react-scripts build"
   },
-  "browserslist": {
-    "production": [">0.2%", "not dead", "not op_mini all"],
-    "development": ["last 1 chrome version"]
-  }
+  "browserslist": { "production": [">0.2%", "not dead"], "development": ["last 1 chrome version"] }
 }
