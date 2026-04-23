@@ -197,27 +197,25 @@ export default function App() {
 
       try {
         const payload = {
-          sender: { name: 'فريق وظيفتنا', email: FROM_EMAIL },
-          to: [{ email: to }],
+          to,
           subject: filledSubject,
           htmlContent: filledBody.replace(/\n/g, '<br>'),
           textContent: filledBody,
+          fromName: 'وظيفتنا',
+          fromEmail: FROM_EMAIL,
         };
         if (cvB64 && cvFile) {
           payload.attachment = [{ content: cvB64, name: cvFile.name }];
         }
 
-        const res = await fetch('https://api.brevo.com/v3/smtp/email', {
+        const res = await fetch('/api/send', {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'api-key': API_KEY_STORED,
-          },
+          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload),
         });
 
-        const ok = res.ok;
         const data = await res.json().catch(() => ({}));
+        const ok = res.ok && data.success;
         setSendLog(prev => [...prev, {
           email: to,
           company: row.CompanyName || row.Company || row['الشركة'] || '—',
