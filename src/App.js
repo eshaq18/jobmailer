@@ -94,6 +94,8 @@ export default function App() {
   const [delay, setDelay] = useState(30);
   const [contacts, setContacts] = useState([]);
   const [allContacts, setAllContacts] = useState([]);
+  const [sheets, setSheets] = useState({});
+  const [sheetNames, setSheetNames] = useState([]);
   const [cvFile, setCvFile] = useState(null);
   const [cvData, setCvData] = useState(null);
   const [excelCols, setExcelCols] = useState([]);
@@ -146,10 +148,18 @@ export default function App() {
     const reader = new FileReader();
     reader.onload = (ev) => {
       const wb = XLSX.read(ev.target.result, { type: 'array' });
-      const rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]]);
-      setAllContacts(rows);
-      setContacts(rows);
-      if (rows.length > 0) setExcelCols(Object.keys(rows[0]));
+      // Read all sheets — each sheet name = city
+      const sheetData = {};
+      wb.SheetNames.forEach(name => {
+        const rows = XLSX.utils.sheet_to_json(wb.Sheets[name]);
+        sheetData[name] = rows;
+      });
+      setSheets(sheetData);
+      setSheetNames(wb.SheetNames);
+      setSelectedCity(wb.SheetNames[0]);
+      const allRows = Object.values(sheetData).flat();
+      setAllContacts(allRows);
+      if (allRows.length > 0) setExcelCols(Object.keys(allRows[0]));
       setResults([]);
     };
     reader.readAsArrayBuffer(file);
@@ -164,16 +174,11 @@ export default function App() {
     reader.readAsDataURL(file);
   }, []);
 
-  // Get unique cities
-  const cities = cityCol ? ['الكل', ...new Set(allContacts.map(c => c[cityCol]).filter(Boolean))] : ['الكل'];
-
-  // Apply filters
+  // Apply filters — use sheet directly
   const filteredContacts = (() => {
-    let list = allContacts;
-    if (cityCol && selectedCity !== 'الكل') list = list.filter(c => c[cityCol] === selectedCity);
-    if (sendCount === 'عدد محدد') list = list.slice(0, customCount);
-    else if (sendCount !== 'الكل') list = list.slice(0, parseInt(sendCount));
-    return list;
+    if (!sheetNames.length) return [];
+    if (selectedCity === 'الكل') return allContacts;
+    return sheets[selectedCity] || [];
   })();
 
   const fillTemplate = (template, contact) =>
@@ -410,56 +415,42 @@ export default function App() {
         {tab === 'filter' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
             <div className="card">
-              <div style={{ fontWeight: 800, fontSize: 15, marginBottom: 16, color: 'var(--accent3)' }}>🔍 فلترة قائمة الإرسال</div>
+              <div style={{ fontWeight: 800, fontSize: 15, marginBottom: 16, color: 'var(--accent3)' }}>🔍 اختر المدينة</div>
 
-              <div className="field">
-                <label className="label">عمود المدينة في Excel</label>
-                <select className="input" value={cityCol} onChange={e => { setCityCol(e.target.value); setSelectedCity('الكل'); }}>
-                  <option value="">-- اختر العمود --</option>
-                  {excelCols.map(col => <option key={col} value={col}>{col}</option>)}
-                </select>
-              </div>
-
-              {cityCol && (
-                <div className="field">
-                  <label className="label">اختر المدينة</label>
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-                    {cities.map(city => (
-                      <button key={city} onClick={() => setSelectedCity(city)} style={{
-                        padding: '6px 14px', borderRadius: 999, border: 'none', cursor: 'pointer',
-                        background: selectedCity === city ? 'var(--accent)' : 'var(--surface2)',
-                        color: selectedCity === city ? 'white' : 'var(--text2)',
-                        fontWeight: 700, fontSize: 13, fontFamily: 'inherit', transition: 'all 0.2s',
-                      }}>{city}</button>
+              {!sheetNames.length ? (
+                <div style={{ textAlign: 'center', padding: '32px', color: 'var(--text3)' }}>
+                  <div style={{ fontSize: 36, marginBottom: 8 }}>📂</div>
+                  <div>ارفع ملف Excel أولاً من تبويب الإعداد</div>
+                </div>
+              ) : (
+                <>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, marginBottom: 20 }}>
+                    <button onClick={() => setSelectedCity('الكل')} style={{
+                      padding: '10px 20px', borderRadius: 999, border: 'none', cursor: 'pointer',
+                      background: selectedCity === 'الكل' ? 'var(--accent)' : 'var(--surface2)',
+                      color: selectedCity === 'الكل' ? 'white' : 'var(--text2)',
+                      fontWeight: 700, fontSize: 14, fontFamily: 'inherit', transition: 'all 0.2s',
+                    }}>
+                      الكل ({allContacts.length})
+                    </button>
+                    {sheetNames.map(name => (
+                      <button key={name} onClick={() => setSelectedCity(name)} style={{
+                        padding: '10px 20px', borderRadius: 999, border: 'none', cursor: 'pointer',
+                        background: selectedCity === name ? 'var(--accent)' : 'var(--surface2)',
+                        color: selectedCity === name ? 'white' : 'var(--text2)',
+                        fontWeight: 700, fontSize: 14, fontFamily: 'inherit', transition: 'all 0.2s',
+                      }}>
+                        {name} ({(sheets[name] || []).length})
+                      </button>
                     ))}
                   </div>
-                </div>
-              )}
 
-              <div className="field">
-                <label className="label">عدد الإيميلات المرسلة</label>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-                  {['الكل','10','25','50','100','200','عدد محدد'].map(opt => (
-                    <button key={opt} onClick={() => setSendCount(opt)} style={{
-                      padding: '6px 14px', borderRadius: 999, border: 'none', cursor: 'pointer',
-                      background: sendCount === opt ? 'var(--accent)' : 'var(--surface2)',
-                      color: sendCount === opt ? 'white' : 'var(--text2)',
-                      fontWeight: 700, fontSize: 13, fontFamily: 'inherit', transition: 'all 0.2s',
-                    }}>{opt}</button>
-                  ))}
-                </div>
-                {sendCount === 'عدد محدد' && (
-                  <div style={{ marginTop: 10 }}>
-                    <input className="input" type="number" min="1" max={allContacts.length} value={customCount} onChange={e => setCustomCount(+e.target.value)} style={{ width: 120 }}/>
+                  <div style={{ background: 'var(--accent-glow)', borderRadius: 'var(--r-sm)', padding: '16px 18px' }}>
+                    <div style={{ fontWeight: 800, fontSize: 16, color: 'var(--accent3)' }}>🎯 {filteredContacts.length} جهة ستُرسل إليها</div>
+                    <div style={{ fontSize: 12, color: 'var(--text3)', marginTop: 4 }}>المدينة: {selectedCity} · الوقت المتوقع: {formatTime(filteredContacts.length * delay)}</div>
                   </div>
-                )}
-              </div>
-
-              <div style={{ background: 'var(--accent-glow)', borderRadius: 'var(--r-sm)', padding: '14px 16px', marginTop: 8 }}>
-                <div style={{ fontWeight: 800, fontSize: 15, color: 'var(--accent3)' }}>🎯 {filteredContacts.length} جهة ستُرسل إليها</div>
-                {cityCol && selectedCity !== 'الكل' && <div style={{ fontSize: 12, color: 'var(--text3)', marginTop: 4 }}>المدينة: {selectedCity}</div>}
-                <div style={{ fontSize: 12, color: 'var(--text3)', marginTop: 2 }}>الوقت المتوقع: {formatTime(filteredContacts.length * delay)}</div>
-              </div>
+                </>
+              )}
             </div>
           </div>
         )}
