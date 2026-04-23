@@ -254,12 +254,34 @@ export default function App() {
     setStopped(true);
   };
 
+  // ─── fetch stats from Brevo ───
+  const fetchStats = async () => {
+    const updated = await Promise.all(
+      sendLog.map(async l => {
+        if (!l.msgId || l.status === 'failed') return l;
+        try {
+          const r = await fetch('/api/stats', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ messageId: l.msgId }),
+          });
+          const d = await r.json();
+          return { ...l, delivered: d.delivered, opened: d.opened, clicked: d.clicked };
+        } catch { return l; }
+      })
+    );
+    setSendLog(updated);
+  };
+
   // ─── export Excel ───
   const exportExcel = () => {
     const rows = sendLog.map(l => ({
       'الإيميل': l.email,
       'الشركة': l.company,
-      'الحالة': l.status === 'sent' ? 'تم الإرسال' : 'فشل',
+      'الإرسال': l.status === 'sent' ? 'تم' : 'فشل',
+      'الوصول': l.delivered ? 'وصل' : l.status === 'sent' ? 'لم يتحقق' : '—',
+      'الفتح': l.opened ? 'فُتح' : l.status === 'sent' ? 'لم يُفتح' : '—',
+      'النقر': l.clicked ? 'نُقر' : '—',
       'الوقت': l.time,
     }));
     const ws = XLSX.utils.json_to_sheet(rows);
@@ -537,18 +559,38 @@ export default function App() {
                 {sendLog.length > 0 && (
                   <button className="btn-export" onClick={exportExcel}>⬇ تصدير Excel</button>
                 )}
+                {sendLog.length > 0 && !sending && (
+                  <button className="btn-stats" onClick={fetchStats}>🔄 تحديث الإحصائيات</button>
+                )}
               </div>
 
               {/* Log */}
               {sendLog.length > 0 && (
                 <div className="card">
-                  <h3 className="card-title">سجل الإرسال</h3>
+                  <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:12}}>
+                    <h3 className="card-title" style={{margin:0}}>سجل الإرسال</h3>
+                    <div style={{display:'flex',gap:12,fontSize:12,color:'var(--muted)'}}>
+                      <span>✓ أُرسل &nbsp; 📬 وصل &nbsp; 👁 فُتح</span>
+                    </div>
+                  </div>
                   <div className="log-list">
                     {[...sendLog].reverse().map((l, i) => (
                       <div key={i} className={`log-item ${l.status}`}>
                         <span className={`dot dot-${l.status}`} />
                         <span className="log-email">{l.email}</span>
                         <span className="log-company">{l.company}</span>
+                        <span className="log-track">
+                          {l.status === 'sent' && <>
+                            <span style={{color:'var(--green)'}}>✓</span>
+                            <span style={{color: l.delivered ? '#3b82f6' : 'var(--muted)'}}>
+                              {l.delivered !== undefined ? (l.delivered ? ' 📬' : ' 📭') : ' …'}
+                            </span>
+                            <span style={{color: l.opened ? 'var(--gold)' : 'var(--muted)'}}>
+                              {l.opened !== undefined ? (l.opened ? ' 👁' : ' —') : ' …'}
+                            </span>
+                          </>}
+                          {l.status === 'failed' && <span style={{color:'var(--red)'}}>✗</span>}
+                        </span>
                         <span className="log-time">{l.time}</span>
                       </div>
                     ))}
