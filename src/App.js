@@ -107,6 +107,10 @@ export default function App() {
 
   const handleCV = e => {
     const file = e.target.files[0]; if (!file) return;
+    if (file.size > 3.5 * 1024 * 1024) {
+      alert('حجم الملف كبير جداً! الحد الأقصى 3.5MB\nحجم ملفك: ' + (file.size / 1024 / 1024).toFixed(1) + 'MB\nقلّص السيرة الذاتية وحاول مرة ثانية.');
+      return;
+    }
     setCvFile(file);
     const reader = new FileReader();
     reader.onload = ev => setCvB64(ev.target.result.split(',')[1]);
