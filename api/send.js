@@ -27,6 +27,7 @@ export default async function handler(req, res) {
     });
 
     const data = await response.json();
+    console.log('Brevo status:', response.status, JSON.stringify(data));
     if (response.ok) {
       return res.status(200).json({ success: true, messageId: data.messageId });
     } else {
