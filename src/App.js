@@ -38,7 +38,7 @@ function LoginScreen({ onLogin }) {
   );
 }
 
-const TABS = ['الفلتر', 'الرسالة', 'الإرسال', 'الجلسات', 'التقارير'];
+const TABS = ['الفلتر', 'الرسالة', 'الإرسال', 'التقارير'];
 
 export default function App() {
   const [loggedIn, setLoggedIn] = useState(false);
@@ -69,42 +69,19 @@ export default function App() {
   const [sendLog, setSendLog] = useState([]);
   const [sendIdx, setSendIdx] = useState(0);
   const [elapsed, setElapsed] = useState(0);
-  const [resumeFrom, setResumeFrom] = useState(0);
-
-  // Sessions
-  const [sessions, setSessions] = useState({});
-  const [sessionName, setSessionName] = useState('');
-  const [savingSession, setSavingSession] = useState(false);
-  const [loadingSession, setLoadingSession] = useState(false);
 
   const pauseRef = useRef(false);
   const stopRef = useRef(false);
   const timerRef = useRef(null);
 
-  // ─── load sessions on login ───
-  useEffect(() => {
-    if (loggedIn) fetchSessions();
-  }, [loggedIn]);
-
-  const fetchSessions = async () => {
-    try {
-      const r = await fetch('/api/sessions');
-      const d = await r.json();
-      setSessions(d || {});
-    } catch {}
-  };
-
-  // ─── timer ───
   useEffect(() => {
     if (sending && !paused) { timerRef.current = setInterval(() => setElapsed(e => e + 1), 1000); }
     else { clearInterval(timerRef.current); }
     return () => clearInterval(timerRef.current);
   }, [sending, paused]);
 
-  // ─── city toggle ───
   const toggleCity = city => setSelectedCities(prev => prev.includes(city) ? prev.filter(c => c !== city) : [...prev, city]);
 
-  // ─── target list ───
   const getTargetList = useCallback(() => {
     let rows = selectedCities.length === 0 ? Object.values(sheets).flat() : selectedCities.flatMap(c => sheets[c] || []);
     const withEmail = rows.filter(r => String(r.Email || r.email || r['الإيميل'] || r['البريد'] || r['البريد الإلكتروني'] || '').trim());
@@ -115,7 +92,6 @@ export default function App() {
 
   const targetList = getTargetList();
 
-  // ─── Excel ───
   const handleExcel = e => {
     const file = e.target.files[0]; if (!file) return;
     setExcelFileName(file.name);
@@ -129,7 +105,6 @@ export default function App() {
     reader.readAsArrayBuffer(file);
   };
 
-  // ─── CV ───
   const handleCV = e => {
     const file = e.target.files[0]; if (!file) return;
     setCvFile(file);
@@ -145,84 +120,16 @@ export default function App() {
 
   const getEmail = row => String(row.Email || row.email || row['الإيميل'] || row['البريد'] || row['البريد الإلكتروني'] || '').trim();
 
-  // ─── save session ───
-  const saveSession = async (log, idx) => {
-    if (!sessionName.trim()) return;
-    setSavingSession(true);
-    const session = {
-      name: sessionName,
-      senderName, subject, body,
-      selectedCities, qtyMode, qtyPreset, qtyCustom, delaySeconds,
-      sendLog: log, sentCount: idx,
-      total: targetList.length,
-      savedAt: new Date().toLocaleString('ar-SA'),
-    };
-    try {
-      await fetch('/api/sessions', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'save', name: sessionName, session }),
-      });
-      await fetchSessions();
-    } catch {}
-    setSavingSession(false);
-  };
-
-  // ─── load session ───
-  const loadSession = (s) => {
-    setLoadingSession(true);
-    setSenderName(s.senderName || 'وظيفتنا');
-    setSubject(s.subject || '');
-    setBody(s.body || '');
-    setSelectedCities(s.selectedCities || []);
-    setQtyMode(s.qtyMode || 'all');
-    setQtyPreset(s.qtyPreset || 100);
-    setQtyCustom(s.qtyCustom || '');
-    setDelaySeconds(s.delaySeconds || 5);
-    setSendLog(s.sendLog || []);
-    setSendIdx(s.sentCount || 0);
-    setResumeFrom(s.sentCount || 0);
-    setSessionName(s.name || '');
-    setLoadingSession(false);
-    setActiveTab(2);
-    alert(`✅ تم تحميل جلسة "${s.name}"\nأُرسل سابقاً: ${s.sentCount} من ${s.total}\nارفع نفس ملف Excel ثم اضغط "استكمال"`);
-  };
-
-  // ─── delete session ───
-  const deleteSession = async (name) => {
-    if (!window.confirm(`هل تريد حذف جلسة "${name}"؟`)) return;
-    await fetch('/api/sessions', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'delete', name }),
-    });
-    await fetchSessions();
-  };
-
-  // ─── SEND ───
-  const startSend = async (startFrom = 0) => {
+  const startSend = async () => {
     if (!Object.keys(sheets).length) { alert('ارفع ملف Excel أولاً'); return; }
     if (!targetList.length) { alert('لا يوجد إيميلات'); return; }
+    if (!body.trim()) { alert('اكتب نص الرسالة أولاً'); return; }
 
     setSending(true); setPaused(false); setStopped(false);
-    if (startFrom === 0) { setSendLog([]); setSendIdx(0); setElapsed(0); }
+    setSendLog([]); setSendIdx(0); setElapsed(0);
     pauseRef.current = false; stopRef.current = false;
 
-    // build set of already-sent emails to skip them
-    const existingEmails = new Set(sendLog.map(l => l.email));
-
-    // when resuming, find the actual index in targetList after skipping sent emails
-    let skipped = 0;
-    let actualStart = 0;
-    if (startFrom > 0) {
-      for (let j = 0; j < targetList.length; j++) {
-        const e = getEmail(targetList[j]);
-        if (existingEmails.has(e)) { skipped++; }
-        if (skipped >= startFrom) { actualStart = j + 1; break; }
-      }
-    }
-
-    for (let i = actualStart; i < targetList.length; i++) {
+    for (let i = 0; i < targetList.length; i++) {
       if (stopRef.current) break;
       while (pauseRef.current) { await new Promise(r => setTimeout(r, 500)); }
       if (stopRef.current) break;
@@ -230,11 +137,12 @@ export default function App() {
       setSendIdx(i + 1);
       const row = targetList[i];
       const to = getEmail(row);
-      if (!to || existingEmails.has(to)) continue;
+      if (!to) continue;
 
       try {
         const payload = {
-          to, subject: fill(subject, row),
+          to,
+          subject: fill(subject, row),
           htmlContent: fill(body, row).replace(/\n/g, '<br>'),
           textContent: fill(body, row),
           fromName: senderName || 'وظيفتنا',
@@ -243,29 +151,20 @@ export default function App() {
         if (cvB64 && cvFile) payload.attachment = [{ content: cvB64, name: cvFile.name }];
 
         const res = await fetch('/api/send', {
-          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload),
         });
         const ok = res.ok;
         const data = await res.json().catch(() => ({}));
 
-        const entry = {
+        setSendLog(prev => [...prev, {
           email: to,
           company: row.CompanyName || row.Company || row['الشركة'] || '—',
           status: ok ? 'sent' : 'failed',
           msgId: data.messageId || '',
           time: new Date().toLocaleTimeString('ar-SA'),
-        };
-
-        setSendLog(prev => {
-          const updated = [...prev, entry];
-          // auto-save every 50 emails
-          if (sessionName && updated.length % 50 === 0) {
-            saveSession(updated, i + 1);
-          }
-          return updated;
-        });
-        existingEmails.add(to);
+        }]);
       } catch {
         setSendLog(prev => [...prev, { email: to, company: row['الشركة'] || '—', status: 'failed', time: new Date().toLocaleTimeString('ar-SA') }]);
       }
@@ -274,7 +173,6 @@ export default function App() {
         await new Promise(r => setTimeout(r, delaySeconds * 1000));
       }
     }
-
     setSending(false); setPaused(false);
   };
 
@@ -282,7 +180,6 @@ export default function App() {
   const resumeSend = () => { pauseRef.current = false; setPaused(false); };
   const stopSend = () => { stopRef.current = true; pauseRef.current = false; setSending(false); setPaused(false); setStopped(true); };
 
-  // ─── fetch stats ───
   const fetchStats = async () => {
     const updated = await Promise.all(
       sendLog.map(async l => {
@@ -297,7 +194,6 @@ export default function App() {
     setSendLog(updated);
   };
 
-  // ─── export ───
   const exportExcel = () => {
     const rows = sendLog.map(l => ({
       'الإيميل': l.email, 'الشركة': l.company,
@@ -309,7 +205,7 @@ export default function App() {
     const ws = XLSX.utils.json_to_sheet(rows);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'نتائج الإرسال');
-    XLSX.writeFile(wb, `وظيفتنا-${sessionName || 'نتائج'}-${new Date().toLocaleDateString('ar-SA').replace(/\//g, '-')}.xlsx`);
+    XLSX.writeFile(wb, `وظيفتنا-نتائج-${new Date().toLocaleDateString('ar-SA').replace(/\//g, '-')}.xlsx`);
   };
 
   const fmt = s => `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
@@ -319,12 +215,8 @@ export default function App() {
   return !loggedIn ? <LoginScreen onLogin={() => setLoggedIn(true)} /> : (
     <div className="app" dir="rtl">
       <header className="header">
-        <div className="header-left">
-          <LOGO />
-          <div>
-            <span className="header-title">وظيفتنا</span>
-            <span className="header-sub">مرسل طلبات التوظيف</span>
-          </div>
+        <div className="header-left"><LOGO />
+          <div><span className="header-title">وظيفتنا</span><span className="header-sub">مرسل طلبات التوظيف</span></div>
         </div>
         <button className="btn-ghost logout" onClick={() => setLoggedIn(false)}>خروج</button>
       </header>
@@ -337,7 +229,6 @@ export default function App() {
 
       <main className="main">
 
-        {/* ══ TAB 0 — الفلتر ══ */}
         {activeTab === 0 && (
           <div className="tab-content">
             <div className="card">
@@ -364,11 +255,6 @@ export default function App() {
                     </button>
                   ))}
                 </div>
-                {selectedCities.length > 0 && (
-                  <p style={{fontSize:13,color:'var(--muted)',marginTop:10}}>
-                    المدن: <strong style={{color:'var(--text)'}}>{selectedCities.join('، ')}</strong>
-                  </p>
-                )}
               </div>
             )}
 
@@ -389,10 +275,7 @@ export default function App() {
                   <input type="number" className="inp" placeholder="أدخل العدد" value={qtyCustom}
                     onChange={e => setQtyCustom(e.target.value)} style={{marginTop:12,maxWidth:180}} />
                 )}
-                <p className="count-summary">
-                  سيتم الإرسال لـ <strong>{targetList.length}</strong> إيميل
-                  {selectedCities.length > 0 ? ` من ${selectedCities.join('، ')}` : ' من جميع المدن'}
-                </p>
+                <p className="count-summary">سيتم الإرسال لـ <strong>{targetList.length}</strong> إيميل</p>
               </div>
             )}
 
@@ -403,24 +286,19 @@ export default function App() {
                   <div style={{flex:1,minWidth:200}}>
                     <div style={{display:'flex',justifyContent:'space-between',marginBottom:6}}>
                       <span style={{fontSize:13,color:'var(--muted)'}}>التأخير</span>
-                      <strong style={{fontSize:15}}>{delaySeconds} ثانية</strong>
+                      <strong>{delaySeconds} ثانية</strong>
                     </div>
-                    <input type="range" min="1" max="60" step="1" value={delaySeconds}
+                    <input type="range" min="1" max="60" value={delaySeconds}
                       onChange={e => setDelaySeconds(Number(e.target.value))}
                       style={{width:'100%',accentColor:'var(--gold)'}} />
-                    <div style={{display:'flex',justifyContent:'space-between',fontSize:11,color:'var(--muted)',marginTop:2}}>
-                      <span>1ث سريع</span><span>30ث آمن</span><span>60ث بطيء</span>
-                    </div>
                   </div>
                   <div style={{background:'var(--bg)',borderRadius:10,padding:'12px 20px',textAlign:'center',minWidth:140}}>
                     <p style={{fontSize:11,color:'var(--muted)',marginBottom:4}}>الوقت المتوقع</p>
                     <p style={{fontSize:22,fontWeight:700,color:'var(--gold)'}}>
                       {(() => {
-                        const totalSec = targetList.length * delaySeconds;
-                        const h = Math.floor(totalSec/3600), m = Math.floor((totalSec%3600)/60), s = totalSec%60;
-                        if (h > 0) return `${h}س ${m}د`;
-                        if (m > 0) return `${m}د ${s}ث`;
-                        return `${s}ث`;
+                        const t = targetList.length * delaySeconds;
+                        const h = Math.floor(t/3600), m = Math.floor((t%3600)/60), s = t%60;
+                        if (h > 0) return `${h}س ${m}د`; if (m > 0) return `${m}د ${s}ث`; return `${s}ث`;
                       })()}
                     </p>
                     <p style={{fontSize:11,color:'var(--muted)',marginTop:4}}>{targetList.length} إيميل</p>
@@ -440,7 +318,6 @@ export default function App() {
           </div>
         )}
 
-        {/* ══ TAB 1 — الرسالة ══ */}
         {activeTab === 1 && (
           <div className="tab-content">
             <div className="card">
@@ -464,10 +341,10 @@ export default function App() {
             </div>
             {targetList.length > 0 && (
               <div className="card">
-                <h3 className="card-title">معاينة (أول إيميل)</h3>
+                <h3 className="card-title">معاينة</h3>
                 <div className="preview-box">
-                  <p className="preview-subject"><strong>العنوان:</strong> {fill(subject, targetList[0])}</p>
-                  <hr />
+                  <p><strong>العنوان:</strong> {fill(subject, targetList[0])}</p>
+                  <hr/>
                   <pre className="preview-body">{fill(body, targetList[0])}</pre>
                 </div>
               </div>
@@ -475,24 +352,8 @@ export default function App() {
           </div>
         )}
 
-        {/* ══ TAB 2 — الإرسال ══ */}
         {activeTab === 2 && (
           <div className="tab-content">
-            {/* Session name */}
-            <div className="card">
-              <h3 className="card-title">اسم الجلسة</h3>
-              <div style={{display:'flex',gap:10}}>
-                <input className="inp" placeholder="مثال: علي — الرياض" value={sessionName}
-                  onChange={e => setSessionName(e.target.value)} style={{flex:1}} />
-                <button className="btn-stats" onClick={() => saveSession(sendLog, sendIdx)}
-                  disabled={!sessionName.trim() || savingSession}>
-                  {savingSession ? '...' : '💾 حفظ'}
-                </button>
-              </div>
-              <p className="hint">سيتم الحفظ تلقائياً كل 50 إيميل</p>
-            </div>
-
-            {/* Stats */}
             <div className="stats-grid">
               <div className="stat-card"><span className="stat-label">المستهدف</span><span className="stat-val">{targetList.length}</span></div>
               <div className="stat-card"><span className="stat-label">تم الإرسال</span><span className="stat-val green">{sent}</span></div>
@@ -504,13 +365,12 @@ export default function App() {
                   {sending && sendIdx > 0 ? (() => {
                     const rem = (targetList.length - sendIdx) * delaySeconds;
                     const h = Math.floor(rem/3600), m = Math.floor((rem%3600)/60), s = rem%60;
-                    if (h > 0) return `${h}س ${m}د`; if (m > 0) return `${m}د ${s}ث`; return `${s}ث`;
+                    if (h>0) return `${h}س ${m}د`; if (m>0) return `${m}د ${s}ث`; return `${s}ث`;
                   })() : '—'}
                 </span>
               </div>
             </div>
 
-            {/* Progress */}
             {(sending || stopped || sendLog.length > 0) && (
               <div className="card">
                 <div className="progress-header">
@@ -525,17 +385,9 @@ export default function App() {
               </div>
             )}
 
-            {/* Controls */}
             <div className="controls-row">
               {!sending ? (
-                <>
-                  <button className="btn-primary" onClick={() => startSend(0)} disabled={!targetList.length}>ابدأ الإرسال</button>
-                  {resumeFrom > 0 && sendLog.length > 0 && (
-                    <button className="btn-resume" onClick={() => startSend(resumeFrom)}>
-                      ▶ استكمال من إيميل {resumeFrom + 1}
-                    </button>
-                  )}
-                </>
+                <button className="btn-primary" onClick={startSend} disabled={!targetList.length}>ابدأ الإرسال</button>
               ) : (
                 <>
                   {!paused ? <button className="btn-pause" onClick={pauseSend}>⏸ إيقاف مؤقت</button>
@@ -547,7 +399,6 @@ export default function App() {
               {sendLog.length > 0 && !sending && <button className="btn-stats" onClick={fetchStats}>🔄 إحصائيات</button>}
             </div>
 
-            {/* Log */}
             {sendLog.length > 0 && (
               <div className="card">
                 <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:12}}>
@@ -563,12 +414,8 @@ export default function App() {
                       <span className="log-track">
                         {l.status === 'sent' && <>
                           <span style={{color:'var(--green)'}}>✓</span>
-                          <span style={{color: l.delivered ? '#3b82f6' : 'var(--muted)'}}>
-                            {l.delivered !== undefined ? (l.delivered ? ' 📬' : ' 📭') : ' …'}
-                          </span>
-                          <span style={{color: l.opened ? 'var(--gold)' : 'var(--muted)'}}>
-                            {l.opened !== undefined ? (l.opened ? ' 👁' : ' —') : ' …'}
-                          </span>
+                          <span>{l.delivered !== undefined ? (l.delivered ? ' 📬' : ' 📭') : ' …'}</span>
+                          <span>{l.opened !== undefined ? (l.opened ? ' 👁' : ' —') : ' …'}</span>
                         </>}
                         {l.status === 'failed' && <span style={{color:'var(--red)'}}>✗</span>}
                       </span>
@@ -581,51 +428,10 @@ export default function App() {
           </div>
         )}
 
-        {/* ══ TAB 3 — الجلسات ══ */}
         {activeTab === 3 && (
           <div className="tab-content">
             <div className="card">
-              <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:16}}>
-                <h3 className="card-title" style={{margin:0}}>الجلسات المحفوظة</h3>
-                <button className="btn-stats" onClick={fetchSessions}>🔄 تحديث</button>
-              </div>
-              {Object.keys(sessions).length === 0 ? (
-                <p className="empty-msg">لا يوجد جلسات محفوظة بعد</p>
-              ) : (
-                <div style={{display:'flex',flexDirection:'column',gap:12}}>
-                  {Object.values(sessions).map(s => (
-                    <div key={s.name} className="session-card">
-                      <div className="session-info">
-                        <span className="session-name">{s.name}</span>
-                        <span className="session-meta">
-                          أُرسل: <strong>{s.sentCount}</strong> من <strong>{s.total || '؟'}</strong>
-                          &nbsp;|&nbsp; {s.savedAt}
-                        </span>
-                        <div className="session-progress-bar">
-                          <div className="session-progress-fill"
-                            style={{width:`${s.total ? Math.min((s.sentCount/s.total)*100,100) : 0}%`}} />
-                        </div>
-                        <span style={{fontSize:11,color:'var(--muted)'}}>
-                          {s.total ? `${Math.round((s.sentCount/s.total)*100)}% مكتمل` : ''}
-                        </span>
-                      </div>
-                      <div className="session-actions">
-                        <button className="btn-resume" onClick={() => loadSession(s)}>▶ استكمال</button>
-                        <button className="btn-stop" onClick={() => deleteSession(s.name)}>🗑 حذف</button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* ══ TAB 4 — التقارير ══ */}
-        {activeTab === 4 && (
-          <div className="tab-content">
-            <div className="card">
-              <h3 className="card-title">ملخص الجلسة الحالية</h3>
+              <h3 className="card-title">ملخص الجلسة</h3>
               <div className="report-grid">
                 <div className="report-item"><span className="report-icon">📨</span><span className="report-num">{sendLog.length}</span><span className="report-lbl">إجمالي المحاولات</span></div>
                 <div className="report-item"><span className="report-icon">✅</span><span className="report-num green">{sent}</span><span className="report-lbl">تم الإرسال</span></div>
@@ -634,7 +440,7 @@ export default function App() {
                 <div className="report-item"><span className="report-icon">📊</span><span className="report-num">{sent ? Math.round((sent/sendLog.length)*100) : 0}%</span><span className="report-lbl">معدل النجاح</span></div>
                 <div className="report-item"><span className="report-icon">👁</span><span className="report-num">{sendLog.filter(l=>l.opened).length}</span><span className="report-lbl">فتح الإيميل</span></div>
               </div>
-              {sendLog.length > 0 && <button className="btn-export full" onClick={exportExcel} style={{marginTop:20}}>⬇ تصدير تقرير Excel</button>}
+              {sendLog.length > 0 && <button className="btn-export full" onClick={exportExcel} style={{marginTop:20}}>⬇ تصدير Excel</button>}
               {!sendLog.length && <p className="empty-msg">لا يوجد بيانات — ابدأ الإرسال أولاً</p>}
             </div>
           </div>
