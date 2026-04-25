@@ -208,9 +208,21 @@ export default function App() {
     if (startFrom === 0) { setSendLog([]); setSendIdx(0); setElapsed(0); }
     pauseRef.current = false; stopRef.current = false;
 
+    // build set of already-sent emails to skip them
     const existingEmails = new Set(sendLog.map(l => l.email));
 
-    for (let i = startFrom; i < targetList.length; i++) {
+    // when resuming, find the actual index in targetList after skipping sent emails
+    let skipped = 0;
+    let actualStart = 0;
+    if (startFrom > 0) {
+      for (let j = 0; j < targetList.length; j++) {
+        const e = getEmail(targetList[j]);
+        if (existingEmails.has(e)) { skipped++; }
+        if (skipped >= startFrom) { actualStart = j + 1; break; }
+      }
+    }
+
+    for (let i = actualStart; i < targetList.length; i++) {
       if (stopRef.current) break;
       while (pauseRef.current) { await new Promise(r => setTimeout(r, 500)); }
       if (stopRef.current) break;
@@ -518,9 +530,9 @@ export default function App() {
               {!sending ? (
                 <>
                   <button className="btn-primary" onClick={() => startSend(0)} disabled={!targetList.length}>ابدأ الإرسال</button>
-                  {resumeFrom > 0 && (
+                  {resumeFrom > 0 && sendLog.length > 0 && (
                     <button className="btn-resume" onClick={() => startSend(resumeFrom)}>
-                      ▶ استكمال من {resumeFrom}
+                      ▶ استكمال من إيميل {resumeFrom + 1}
                     </button>
                   )}
                 </>
