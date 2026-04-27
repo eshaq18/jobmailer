@@ -83,11 +83,36 @@ export default function App() {
   const toggleCity = city => setSelectedCities(prev => prev.includes(city) ? prev.filter(c => c !== city) : [...prev, city]);
 
   const getTargetList = useCallback(() => {
-    let rows = selectedCities.length === 0 ? Object.values(sheets).flat() : selectedCities.flatMap(c => sheets[c] || []);
-    const withEmail = rows.filter(r => String(r.Email || r.email || r['الإيميل'] || r['البريد'] || r['البريد الإلكتروني'] || '').trim());
-    if (qtyMode === 'all') return withEmail;
-    if (qtyMode === 'preset') return withEmail.slice(0, qtyPreset);
-    const n = parseInt(qtyCustom); return withEmail.slice(0, isNaN(n) ? withEmail.length : n);
+    const getEmail = r => String(r.Email || r.email || r['الإيميل'] || r['البريد'] || r['البريد الإلكتروني'] || '').trim();
+
+    // إذا ما في مدن محددة — خذ الكل
+    if (selectedCities.length === 0) {
+      const all = Object.values(sheets).flat().filter(r => getEmail(r));
+      if (qtyMode === 'all') return all;
+      if (qtyMode === 'preset') return all.slice(0, qtyPreset);
+      const n = parseInt(qtyCustom); return all.slice(0, isNaN(n) ? all.length : n);
+    }
+
+    // توزيع متساوي بين المدن المختارة
+    const limit = qtyMode === 'all' ? Infinity : qtyMode === 'preset' ? qtyPreset : (parseInt(qtyCustom) || Infinity);
+    const perCity = limit === Infinity ? Infinity : Math.ceil(limit / selectedCities.length);
+
+    // خذ من كل مدينة حصتها بالتساوي
+    const cityBuckets = selectedCities.map(city => {
+      const rows = (sheets[city] || []).filter(r => getEmail(r));
+      return perCity === Infinity ? rows : rows.slice(0, perCity);
+    });
+
+    // دمج بطريقة round-robin (صف من كل مدينة بالتناوب)
+    const merged = [];
+    const maxLen = Math.max(...cityBuckets.map(b => b.length));
+    for (let i = 0; i < maxLen; i++) {
+      for (const bucket of cityBuckets) {
+        if (i < bucket.length) merged.push(bucket[i]);
+      }
+    }
+
+    return limit === Infinity ? merged : merged.slice(0, limit);
   }, [sheets, selectedCities, qtyMode, qtyPreset, qtyCustom]);
 
   const targetList = getTargetList();
