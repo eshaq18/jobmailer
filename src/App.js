@@ -66,8 +66,12 @@ export default function App() {
   const [sending, setSending] = useState(false);
   const [paused, setPaused] = useState(false);
   const [stopped, setStopped] = useState(false);
-  const [sendLog, setSendLog] = useState([]);
-  const [sendIdx, setSendIdx] = useState(0);
+  const [sendLog, setSendLog] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('wazifatna_log') || '[]'); } catch { return []; }
+  });
+  const [sendIdx, setSendIdx] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('wazifatna_idx') || '0'); } catch { return 0; }
+  });
   const [elapsed, setElapsed] = useState(0);
 
   const pauseRef = useRef(false);
@@ -79,6 +83,14 @@ export default function App() {
     else { clearInterval(timerRef.current); }
     return () => clearInterval(timerRef.current);
   }, [sending, paused]);
+
+  // حفظ السجل في localStorage تلقائياً
+  useEffect(() => {
+    try {
+      localStorage.setItem('wazifatna_log', JSON.stringify(sendLog));
+      localStorage.setItem('wazifatna_idx', JSON.stringify(sendIdx));
+    } catch {}
+  }, [sendLog, sendIdx]);
 
   const toggleCity = city => setSelectedCities(prev => prev.includes(city) ? prev.filter(c => c !== city) : [...prev, city]);
 
@@ -426,6 +438,15 @@ export default function App() {
               )}
               {sendLog.length > 0 && <button className="btn-export" onClick={exportExcel}>⬇ تصدير Excel</button>}
               {sendLog.length > 0 && !sending && <button className="btn-stats" onClick={fetchStats}>🔄 إحصائيات</button>}
+              {sendLog.length > 0 && !sending && (
+                <button className="btn-stop" onClick={() => {
+                  if (window.confirm('هل تريد مسح سجل الإرسال الحالي؟')) {
+                    setSendLog([]); setSendIdx(0);
+                    localStorage.removeItem('wazifatna_log');
+                    localStorage.removeItem('wazifatna_idx');
+                  }
+                }}>🗑 مسح السجل</button>
+              )}
             </div>
 
             {sendLog.length > 0 && (
