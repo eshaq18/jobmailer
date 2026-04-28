@@ -8,9 +8,18 @@ async function kvGet() {
       headers: { Authorization: `Bearer ${KV_TOKEN}` }
     });
     const d = await r.json();
-    console.log('kvGet raw:', JSON.stringify(d).slice(0, 100));
+    console.log('kvGet raw:', JSON.stringify(d).slice(0, 150));
     if (!d.result || d.result === 'nil') return [];
-    const parsed = JSON.parse(d.result);
+    
+    let parsed = d.result;
+    // قد يكون محفوظ كـ string مزدوج
+    if (typeof parsed === 'string') {
+      try { parsed = JSON.parse(parsed); } catch {}
+    }
+    if (typeof parsed === 'string') {
+      try { parsed = JSON.parse(parsed); } catch {}
+    }
+    console.log('parsed type:', typeof parsed, Array.isArray(parsed) ? 'array len:' + parsed.length : '');
     return Array.isArray(parsed) ? parsed : [];
   } catch (e) {
     console.error('kvGet error:', e.message);
@@ -20,13 +29,14 @@ async function kvGet() {
 
 async function kvSet(value) {
   try {
+    // نحفظ مرة واحدة فقط
     const r = await fetch(`${KV_URL}/set/${ARCHIVE_KEY}`, {
       method: 'POST',
       headers: { Authorization: `Bearer ${KV_TOKEN}`, 'Content-Type': 'application/json' },
       body: JSON.stringify(JSON.stringify(value))
     });
     const d = await r.json();
-    console.log('kvSet result:', JSON.stringify(d));
+    console.log('kvSet result:', JSON.stringify(d).slice(0, 100));
     return r.ok;
   } catch (e) {
     console.error('kvSet error:', e.message);
