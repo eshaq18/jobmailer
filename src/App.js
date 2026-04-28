@@ -252,7 +252,7 @@ export default function App() {
 
   // ─── حفظ الجلسة الحالية في الأرشيف ───
   const saveToArchive = async () => {
-    if (!sendLog.length) return;
+    if (!sendLog.length) { alert('لا يوجد سجل للحفظ'); return; }
     try {
       const entry = {
         date: new Date().toLocaleString('ar-SA'),
@@ -265,12 +265,15 @@ export default function App() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'add', entry }),
       });
-      if (r.ok) {
-        alert('✅ تم حفظ الجلسة في السجلات!');
+      const d = await r.json().catch(() => ({}));
+      if (r.ok && d.ok) {
+        alert('✅ تم الحفظ بنجاح! عدد السجلات: ' + (d.count || ''));
         loadArchive();
+      } else {
+        alert('❌ فشل الحفظ: ' + (d.error || 'خطأ غير معروف'));
       }
     } catch (e) {
-      alert('خطأ في الحفظ: ' + e.message);
+      alert('❌ خطأ في الاتصال: ' + e.message);
     }
   };
 
@@ -498,10 +501,11 @@ export default function App() {
               {sendLog.length > 0 && !sending && <button className="btn-resume" onClick={saveToArchive}>💾 حفظ في السجلات</button>}
               {sendLog.length > 0 && !sending && (
                 <button className="btn-stop" onClick={() => {
-                  if (window.confirm('هل تريد مسح سجل الإرسال الحالي؟')) {
+                  if (window.confirm('هل تريد مسح سجل الإرسال الحالي؟\nتأكد من الحفظ أولاً إذا أردت الاحتفاظ به.')) {
                     setSendLog([]); setSendIdx(0);
                     localStorage.removeItem('wazifatna_log');
                     localStorage.removeItem('wazifatna_idx');
+                    alert('✅ تم مسح السجل');
                   }
                 }}>🗑 مسح السجل</button>
               )}
@@ -587,13 +591,18 @@ export default function App() {
                             XLSX.writeFile(wb, 'وظيفتنا-' + a.date.replace(/[/:]/g,'-') + '.xlsx');
                           }}>⬇ Excel</button>
                           <button className="btn-stop" style={{padding:'8px 14px',fontSize:12}} onClick={async () => {
-                            if (!window.confirm('حذف هذا السجل؟')) return;
-                            await fetch('/api/archive', {
+                            if (!window.confirm('هل تريد حذف هذا السجل نهائياً؟')) return;
+                            const r = await fetch('/api/archive', {
                               method: 'POST',
                               headers: { 'Content-Type': 'application/json' },
                               body: JSON.stringify({ action: 'delete', index: i })
                             });
-                            loadArchive();
+                            if (r.ok) {
+                              alert('✅ تم الحذف بنجاح');
+                              loadArchive();
+                            } else {
+                              alert('❌ فشل الحذف');
+                            }
                           }}>🗑</button>
                         </div>
                       </div>
