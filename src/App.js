@@ -38,7 +38,7 @@ function LoginScreen({ onLogin }) {
   );
 }
 
-const TABS = ['الفلتر', 'الرسالة', 'الإرسال', 'التقارير'];
+const TABS = ['الفلتر', 'الرسالة', 'الإرسال', 'السجلات', 'التقارير'];
 
 export default function App() {
   const [loggedIn, setLoggedIn] = useState(() => localStorage.getItem('wazifatna_auth') === '1');
@@ -74,6 +74,10 @@ export default function App() {
   });
   const [elapsed, setElapsed] = useState(0);
 
+  const [archive, setArchive] = useState([]);
+  const [viewingArchive, setViewingArchive] = useState(null);
+  const [archiveLoading, setArchiveLoading] = useState(false);
+
   const pauseRef = useRef(false);
   const stopRef = useRef(false);
   const timerRef = useRef(null);
@@ -93,6 +97,19 @@ export default function App() {
   }, [sendLog, sendIdx]);
 
   const toggleCity = city => setSelectedCities(prev => prev.includes(city) ? prev.filter(c => c !== city) : [...prev, city]);
+
+  // ─── تحميل الأرشيف من السحابة ───
+  const loadArchive = async () => {
+    setArchiveLoading(true);
+    try {
+      const r = await fetch('/api/archive');
+      const data = await r.json();
+      setArchive(Array.isArray(data) ? data : []);
+    } catch {}
+    setArchiveLoading(false);
+  };
+
+  useEffect(() => { loadArchive(); }, []);
 
   const getTargetList = useCallback(() => {
     const getEmail = r => String(r.Email || r.email || r['الإيميل'] || r['البريد'] || r['البريد الإلكتروني'] || '').trim();
@@ -166,8 +183,24 @@ export default function App() {
     if (!targetList.length) { alert('لا يوجد إيميلات'); return; }
     if (!body.trim()) { alert('اكتب نص الرسالة أولاً'); return; }
 
+    // أرشفة السجل القديم قبل البدء
     setSending(true); setPaused(false); setStopped(false);
-    setSendLog([]); setSendIdx(0); setElapsed(0);
+    setSendIdx(0); setElapsed(0);
+    setSendLog(prev => {
+      if (prev.length > 0) {
+        try {
+          const archived = JSON.parse(localStorage.getItem('wazifatna_archive') || '[]');
+          archived.unshift({ date: new Date().toLocaleString('ar-SA'), log: prev });
+          if (archived.length > 10) archived.pop(); // احتفظ بآخر 10 جلسات
+          fetch('/api/archive', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'add', entry: { date: new Date().toLocaleString('ar-SA'), log: prev } })
+          }).then(() => loadArchive()).catch(() => {});
+        } catch {}
+      }
+      return [];
+    });
     pauseRef.current = false; stopRef.current = false;
 
     for (let i = 0; i < targetList.length; i++) {
@@ -478,7 +511,101 @@ export default function App() {
           </div>
         )}
 
+        {/* ══ TAB 3 — السجلات ══ */}
         {activeTab === 3 && (
+          <div className="tab-content">
+            <div className="card">
+              <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:16}}>
+                <h3 className="card-title" style={{margin:0}}>السجلات السابقة ☁️</h3>
+                <div style={{display:'flex',gap:8}}>
+                  {viewingArchive && (
+                    <button className="btn-ghost" style={{color:'var(--muted)',fontSize:13}} onClick={() => setViewingArchive(null)}>
+                      ← رجوع
+                    </button>
+                  )}
+                  <button className="btn-stats" style={{padding:'6px 14px',fontSize:12}} onClick={loadArchive}>
+                    {archiveLoading ? '...' : '🔄 تحديث'}
+                  </button>
+                </div>
+              </div>
+
+              {/* قائمة الجلسات */}
+              {!viewingArchive && (
+                archive.length === 0 ? (
+                  <p className="empty-msg">لا يوجد سجلات سابقة بعد</p>
+                ) : (
+                  <div style={{display:'flex',flexDirection:'column',gap:10}}>
+                    {archive.map((a, i) => (
+                      <div key={i} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'14px 16px',background:'var(--bg)',borderRadius:10,border:'1px solid var(--border)'}}>
+                        <div>
+                          <p style={{fontWeight:700,fontSize:14,marginBottom:3}}>{a.date}</p>
+                          <p style={{fontSize:12,color:'var(--muted)'}}>
+                            {a.log.length} إيميل &nbsp;|&nbsp;
+                            <span style={{color:'var(--green)'}}>✓ {a.log.filter(l=>l.status==='sent').length} تم</span>
+                            &nbsp;|&nbsp;
+                            <span style={{color:'var(--gold)'}}>👁 {a.log.filter(l=>l.opened).length} فُتح</span>
+                          </p>
+                        </div>
+                        <div style={{display:'flex',gap:8}}>
+                          <button className="btn-stats" style={{padding:'8px 14px',fontSize:12}} onClick={() => setViewingArchive(a)}>عرض</button>
+                          <button className="btn-export" style={{padding:'8px 14px',fontSize:12}} onClick={() => {
+                            const rows = a.log.map(l => ({
+                              'الإيميل': l.email, 'الشركة': l.company,
+                              'الإرسال': l.status === 'sent' ? 'تم' : 'فشل',
+                              'الوصول': l.delivered ? 'وصل' : 'لم يتحقق',
+                              'الفتح': l.opened ? 'فُتح' : 'لم يُفتح',
+                              'الوقت': l.time,
+                            }));
+                            const ws = XLSX.utils.json_to_sheet(rows);
+                            const wb = XLSX.utils.book_new();
+                            XLSX.utils.book_append_sheet(wb, ws, 'نتائج');
+                            XLSX.writeFile(wb, 'وظيفتنا-' + a.date.replace(/[/:]/g,'-') + '.xlsx');
+                          }}>⬇ Excel</button>
+                          <button className="btn-stop" style={{padding:'8px 14px',fontSize:12}} onClick={async () => {
+                            if (!window.confirm('حذف هذا السجل؟')) return;
+                            await fetch('/api/archive', {
+                              method: 'POST',
+                              headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({ action: 'delete', index: i })
+                            });
+                            loadArchive();
+                          }}>🗑</button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )
+              )}
+
+              {/* عرض سجل محدد */}
+              {viewingArchive && (
+                <div>
+                  <p style={{fontSize:13,color:'var(--muted)',marginBottom:12}}>{viewingArchive.log.length} إيميل — {viewingArchive.date}</p>
+                  <div className="log-list">
+                    {[...viewingArchive.log].reverse().map((l, i) => (
+                      <div key={i} className={"log-item " + l.status}>
+                        <span className={"dot dot-" + l.status}/>
+                        <span className="log-email">{l.email}</span>
+                        <span className="log-company">{l.company}</span>
+                        <span className="log-track">
+                          {l.status==='sent' && <>
+                            <span style={{color:'var(--green)'}}>✓</span>
+                            <span>{l.delivered!==undefined?(l.delivered?' 📬':' 📭'):' …'}</span>
+                            <span>{l.opened!==undefined?(l.opened?' 👁':' —'):' …'}</span>
+                          </>}
+                          {l.status==='failed' && <span style={{color:'var(--red)'}}>✗</span>}
+                        </span>
+                        <span className="log-time">{l.time}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {activeTab === 4 && (
           <div className="tab-content">
             <div className="card">
               <h3 className="card-title">ملخص الجلسة</h3>
