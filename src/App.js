@@ -102,7 +102,7 @@ export default function App() {
   const loadArchive = async () => {
     setArchiveLoading(true);
     try {
-      const r = await fetch('/api/archive');
+      const r = await fetch('/api/archive', { cache: 'no-store' });
       const data = await r.json();
       setArchive(Array.isArray(data) ? data : []);
     } catch {}
