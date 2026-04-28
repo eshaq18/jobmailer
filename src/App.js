@@ -250,6 +250,30 @@ export default function App() {
     setSending(false); setPaused(false);
   };
 
+  // ─── حفظ الجلسة الحالية في الأرشيف ───
+  const saveToArchive = async () => {
+    if (!sendLog.length) return;
+    try {
+      const entry = {
+        date: new Date().toLocaleString('ar-SA'),
+        log: sendLog,
+        sent: sendLog.filter(l => l.status === 'sent').length,
+        total: sendLog.length,
+      };
+      const r = await fetch('/api/archive', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'add', entry }),
+      });
+      if (r.ok) {
+        alert('✅ تم حفظ الجلسة في السجلات!');
+        loadArchive();
+      }
+    } catch (e) {
+      alert('خطأ في الحفظ: ' + e.message);
+    }
+  };
+
   const pauseSend = () => { pauseRef.current = true; setPaused(true); };
   const resumeSend = () => { pauseRef.current = false; setPaused(false); };
   const stopSend = () => { stopRef.current = true; pauseRef.current = false; setSending(false); setPaused(false); setStopped(true); };
@@ -471,6 +495,7 @@ export default function App() {
               )}
               {sendLog.length > 0 && <button className="btn-export" onClick={exportExcel}>⬇ تصدير Excel</button>}
               {sendLog.length > 0 && !sending && <button className="btn-stats" onClick={fetchStats}>🔄 إحصائيات</button>}
+              {sendLog.length > 0 && !sending && <button className="btn-resume" onClick={saveToArchive}>💾 حفظ في السجلات</button>}
               {sendLog.length > 0 && !sending && (
                 <button className="btn-stop" onClick={() => {
                   if (window.confirm('هل تريد مسح سجل الإرسال الحالي؟')) {
