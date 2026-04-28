@@ -59,6 +59,7 @@ export default function App() {
 
   // Message
   const [senderName, setSenderName] = useState('وظيفتنا');
+  const [clientName, setClientName] = useState('');
   const [subject, setSubject] = useState('طلب توظيف — {{CompanyName}}');
   const [body, setBody] = useState('السادة المسؤولين في {{CompanyName}}،\n\nأتقدم بطلبي للانضمام إلى فريقكم وأرفق سيرتي الذاتية للاطلاع عليها.\n\nشكراً لكم،\nفريق وظيفتنا');
 
@@ -250,12 +251,45 @@ export default function App() {
     setSending(false); setPaused(false);
   };
 
+  // ─── تحديث إحصائيات سجل محفوظ ───
+  const fetchStatsForArchive = async (archiveIndex, log) => {
+    const updated = await Promise.all(
+      log.map(async l => {
+        if (!l.msgId || l.status === 'failed') return l;
+        try {
+          const r = await fetch('/api/stats', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ messageId: l.msgId }),
+          });
+          const d = await r.json();
+          return { ...l, delivered: d.delivered, opened: d.opened, clicked: d.clicked };
+        } catch { return l; }
+      })
+    );
+    // حفظ التحديث في الأرشيف
+    const updatedEntry = { ...archive[archiveIndex], log: updated };
+    await fetch('/api/archive', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'delete', index: archiveIndex }),
+    });
+    await fetch('/api/archive', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'add', entry: updatedEntry }),
+    });
+    alert('✅ تم تحديث الإحصائيات!');
+    loadArchive();
+  };
+
   // ─── حفظ الجلسة الحالية في الأرشيف ───
   const saveToArchive = async () => {
     if (!sendLog.length) { alert('لا يوجد سجل للحفظ'); return; }
     try {
       const entry = {
         date: new Date().toLocaleString('ar-SA'),
+        clientName: clientName.trim() || 'بدون اسم',
         log: sendLog,
         sent: sendLog.filter(l => l.status === 'sent').length,
         total: sendLog.length,
@@ -455,6 +489,13 @@ export default function App() {
 
         {activeTab === 2 && (
           <div className="tab-content">
+            {/* Client name */}
+            <div className="card">
+              <h3 className="card-title">اسم العميل</h3>
+              <input className="inp" value={clientName} onChange={e => setClientName(e.target.value)} placeholder="مثال: علي العمري" />
+              <p className="hint">يظهر في السجلات لتمييز كل جلسة</p>
+            </div>
+
             <div className="stats-grid">
               <div className="stat-card"><span className="stat-label">المستهدف</span><span className="stat-val">{targetList.length}</span></div>
               <div className="stat-card"><span className="stat-label">تم الإرسال</span><span className="stat-val green">{sent}</span></div>
@@ -567,7 +608,8 @@ export default function App() {
                     {archive.map((a, i) => (
                       <div key={i} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'14px 16px',background:'var(--bg)',borderRadius:10,border:'1px solid var(--border)'}}>
                         <div>
-                          <p style={{fontWeight:700,fontSize:14,marginBottom:3}}>{a.date}</p>
+                          <p style={{fontWeight:700,fontSize:15,marginBottom:2,color:'var(--text)'}}>{a.clientName || 'بدون اسم'}</p>
+                        <p style={{fontSize:12,color:'var(--muted)',marginBottom:3}}>{a.date}</p>
                           <p style={{fontSize:12,color:'var(--muted)'}}>
                             {a.log.length} إيميل &nbsp;|&nbsp;
                             <span style={{color:'var(--green)'}}>✓ {a.log.filter(l=>l.status==='sent').length} تم</span>
@@ -577,6 +619,7 @@ export default function App() {
                         </div>
                         <div style={{display:'flex',gap:8}}>
                           <button className="btn-stats" style={{padding:'8px 14px',fontSize:12}} onClick={() => setViewingArchive(a)}>عرض</button>
+                          <button className="btn-resume" style={{padding:'8px 14px',fontSize:12}} onClick={() => fetchStatsForArchive(i, a.log)}>🔄</button>
                           <button className="btn-export" style={{padding:'8px 14px',fontSize:12}} onClick={() => {
                             const rows = a.log.map(l => ({
                               'الإيميل': l.email, 'الشركة': l.company,
