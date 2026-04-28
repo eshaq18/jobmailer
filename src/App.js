@@ -41,7 +41,7 @@ function LoginScreen({ onLogin }) {
 const TABS = ['الفلتر', 'الرسالة', 'الإرسال', 'التقارير'];
 
 export default function App() {
-  const [loggedIn, setLoggedIn] = useState(false);
+  const [loggedIn, setLoggedIn] = useState(() => localStorage.getItem('wazifatna_auth') === '1');
   const [activeTab, setActiveTab] = useState(0);
 
   // Excel
@@ -253,13 +253,13 @@ export default function App() {
   const sent = sendLog.filter(l => l.status === 'sent').length;
   const failed = sendLog.filter(l => l.status === 'failed').length;
 
-  return !loggedIn ? <LoginScreen onLogin={() => setLoggedIn(true)} /> : (
+  return !loggedIn ? <LoginScreen onLogin={() => { setLoggedIn(true); localStorage.setItem('wazifatna_auth', '1'); }} /> : (
     <div className="app" dir="rtl">
       <header className="header">
         <div className="header-left"><LOGO />
           <div><span className="header-title">وظيفتنا</span><span className="header-sub">مرسل طلبات التوظيف</span></div>
         </div>
-        <button className="btn-ghost logout" onClick={() => setLoggedIn(false)}>خروج</button>
+        <button className="btn-ghost logout" onClick={() => { setLoggedIn(false); localStorage.removeItem('wazifatna_auth'); }}>خروج</button>
       </header>
 
       <nav className="tabs">
